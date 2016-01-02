@@ -1,0 +1,8 @@
+# depslib dependency file v1.0
+1451754402 source:/home/sofia/SquaredShell/main.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<errno.h>
+	<string.h>
+
