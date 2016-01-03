@@ -5,7 +5,9 @@
 #include <string.h>
 
 int execute(char input[1024]) {
+    printf("geia sou sofia");
     exit(0); // Μόνο για τώρα
+
 }
 
 int main()
