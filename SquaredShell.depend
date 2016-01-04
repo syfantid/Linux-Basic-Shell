@@ -6,3 +6,14 @@
 	<errno.h>
 	<string.h>
 
+1451929351 source:/home/sofia/basic-shell/main.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<errno.h>
+	<string.h>
+	<sys/wait.h>
+	<sys/types.h>
+	<pwd.h>
+	<fcntl.h>
+
