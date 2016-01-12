@@ -7,10 +7,14 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 int g_commandMax = 1024; // Παραδοχή: Ένα command του shell δεν ξεπερνά τους 1024 χαρακτήρες
 int g_commandMaxWords = 128;
 int g_currentDirectoryMax = 1024; // Παραδοχή: Ένα current directory path δεν ξεπερνά τους 1024 χαρακτήρες
+bool g_redirect = 0;
+int g_out;
+int g_in;
 
 /* Επιστρέφει το Home directory του χρήστη */
 char* getHomeDir() {
@@ -134,10 +138,11 @@ char** TokenizeInput(char* input,int* length) {
     return tokens;
 }
 
-/* Ανακατεύθυνση εισόδου/εξόδου από/σε αρχείο */ // ΔΕ ΛΕΙΤΟΥΡΓΕΙ ΑΚΟΜΗ
+/* Ανακατεύθυνση εισόδου/εξόδου από/σε αρχείο */
 int Redirect(char* redirectSymbol,char* filename) {
     int out,in;
-
+    g_out = dup(1);
+    g_in = dup(0);
     if(strcmp(redirectSymbol,">") == 0) {
         errno = 0;
         out = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
@@ -166,7 +171,15 @@ int Redirect(char* redirectSymbol,char* filename) {
         dup2(in,0);
         close(in);
     }
+    g_redirect = 1;
     return 0;
+}
+
+/* Ανακατεύθυνση εισόδου/εξόδου πίσω στο stdin/stdout αντίστοιχα */
+void directBack() {
+    dup2(g_out,1);
+    dup2(g_in,0);
+    g_redirect = 0;
 }
 
 char** ParseInput(char* input) {
@@ -232,6 +245,9 @@ int main()
         args = ParseInput(input);
         if(ExecuteInput(args) == EXIT_FAILURE) {
                 return EXIT_FAILURE;
+        }
+        if(g_redirect) {
+            directBack();
         }
     }
 
