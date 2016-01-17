@@ -48,7 +48,6 @@ void Deallocate(char **array,int length)
     free(array);
 }
 
-
 /* Εκτέλεση εξωτερικού προγράμματος */
 int Launch(char** args) {
     pid_t pid = fork();
@@ -180,7 +179,7 @@ char* ReadInput() {
     return input;
 }
 
-/* Χωρισμός ιnput του χρήστη με βάση το κενό */
+/* Χωρισμός input του χρήστη με βάση το κενό */
 char** TokenizeInput(char* input,int* length) {
     const char delimiters[] = " ";
     char *token;
@@ -259,6 +258,7 @@ void directBack() {
     g_redirect = 0;
 }
 
+/* Με δεδομένη μία λιστα από tokens επιλέγει τα arguments για την κλήση των εσωτερικών/εξωτερικών προγραμμάτων */
 char** ParseInput(char* input, int* length) {
     int numOfTokens;
     int numOfArgs = 0;
@@ -307,28 +307,24 @@ int main()
     changeDir(homeDir);
 
     while (1) {
-        errno = 0;
         // Εκτύπωση προτροπής στην κονσόλα του shell
+        errno = 0;
         char cwd[g_currentDirectoryMax];
         getcwd(cwd, sizeof(cwd)); // Εύρεση του τρέχοντα φακέλου που βρίσκεται το shell
         if (errno) {
             perror("An error occured");
             exit(EXIT_FAILURE);
         }
-
         printf("SquaredShell:%s:$ ", cwd);
-        input = ReadInput(); // Ανάγνωση εντολής χρήστη
-        //args = TokenizeInput(input,&length); //TRIAL
-        args = ParseInput(input, &length);
-        /*int i=0;
-        while(args[i] != NULL) {
-            printf("%s\n",args[i]);
-            i++;
-        }*/
-        if(ExecuteInput(args,length) == EXIT_FAILURE) {
+
+        // Κύριο πρόγραμμα
+        input = ReadInput(); // 1. Ανάγνωση εντολής χρήστη
+        args = ParseInput(input, &length); // 2. Επεξεργασία εντολής χρήστη
+        if(ExecuteInput(args,length) == EXIT_FAILURE) { // 3. Εκτέλεση εντολής χρήστη
                 return EXIT_FAILURE;
         }
-        if(g_redirect) { // Αν έχει γίνει ανακατεύθυνση σε αρχείο πρέπει να γίνει πάλι ανακατεύθυνση του output στην κονσόλα
+        // Αν έχει γίνει ανακατεύθυνση σε αρχείο πρέπει να γίνει πάλι ανακατεύθυνση του output στην κονσόλα
+        if(g_redirect) {
             directBack();
         }
     }
