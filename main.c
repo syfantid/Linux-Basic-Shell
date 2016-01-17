@@ -68,25 +68,95 @@ int Launch(char** args) {
 }
 
 /* Εκτέλεση Εντολής */
-int ExecuteInput(char** args) {
+int ExecuteInput(char** args, int length) {
     if(args == NULL) {
         return EXIT_FAILURE; // Δόθηκε κενή εντολή
     }
-    if(strcmp(args[0],"cd") == 0) { // Αλλαγή directory
-        if(args[1] == NULL) { // Δεν υπάρχει path για την αλλαγή του directory
-        //Επιστροφή στο Home Directory του χρήστη
-            char* homeDir = getHomeDir();
-            if(changeDir(homeDir) == EXIT_FAILURE) {
-                return EXIT_FAILURE;
-            }
-        } else {
-            changeDir(args[1]);
+    // Έλεγχος για το αν υπάρχει διασωλήνωση -  Αν υπάρχει που χωρίζεται η πρώτη από τη δεύτερη εντολή
+    int i = 0;
+    char** leftArgs = (char**)malloc(sizeof(char*) * length); // Περιλαμβάνει τα args πριν τη διασωλήνωση
+    int left_i = 0; // H θέση που βρισκόμαστε στον πίνακα leftArgs
+    char** rightArgs = (char**)malloc(sizeof(char*) * length); // Περιλαμβάνει τα args μετά τη διασωλήνωση
+    int right_i = 0; // H θέση που βρισκόμαστε στον πίνακα rightArgs
+    bool left = 1; // Ελέγχει αν είμαστε πριν ή μετά τη διασωλήνωση εφόσον αυτή υπάρχει
+    while(args[i] != NULL) {
+        if(strcmp(args[i],"|") != 0 && left == 1) { // Η αριστερή εντολή της διασωλήνωσης
+            leftArgs[left_i] = (char*)malloc(sizeof(char) * (strlen(args[i]) + 1));
+            strcpy(leftArgs[left_i],args[i]);
+            left_i++;
+        } else if(strcmp(args[i],"|") != 0 && left == 0) { // Η δεξιά εντολή της διασωλήνωσης
+            rightArgs[right_i] = (char*)malloc(sizeof(char) * (strlen(args[i]) + 1));
+            strcpy(rightArgs[right_i],args[i]);
+            right_i++;
+        } else if(strcmp(args[i],"|") == 0) { // Ελέγχει αν υπάρχει διασωλήνωση
+            left = 0;
         }
-    } else if(strcmp(args[0],"exit") == 0) {
-        exit(EXIT_SUCCESS);
-    } else {
-        return Launch(args);
+        rightArgs[right_i] = NULL;
+        leftArgs[left_i] = NULL;
+        i++;
     }
+
+    // Εκτέλεση εντολής
+    if(rightArgs[0] != NULL) { // Αν υπάρχει διασωλήνωση
+        errno = 0;
+        int pipefd[2];
+        pipe(pipefd);
+        if(errno) {
+            perror("An error occured");
+            exit(EXIT_FAILURE);
+        }
+
+        errno = 0;
+        pid_t pid; // Δημιουργώ διεργασία παιδί
+        if(errno) {
+            perror("An error occured");
+            exit(EXIT_FAILURE);
+        }
+
+        // Το παιδί εκτελεί το αριστερό μέρος της διασωλήνωσης
+        if(fork() == 0) {
+            dup2(pipefd[0],0); // Ανάγνωση από είσοδο pipe όχι από stdin
+            //g_redirect = 1;
+            close(pipefd[1]);
+            errno =0;
+            execvp(rightArgs[0],rightArgs);
+            if(errno) {
+                perror("An error occured");
+                exit(EXIT_FAILURE);
+            }
+            waitpid(pid,NULL,0);
+        } else if((pid=fork()) == 0) { // Διεργασία γονέας
+            dup2(pipefd[1],1); // Εγγραφή στην έξοδο του pipe όχι στο stdout
+            //g_redirect = 1;
+            close(pipefd[0]);
+            errno =0;
+            execvp(leftArgs[0],leftArgs);
+            if(errno) {
+                perror("An error occured");
+                exit(EXIT_FAILURE);
+            }
+            waitpid(pid,NULL,0);
+        } else {
+            waitpid(pid,NULL,0);
+        }
+    } else { // Δεν υπάρχει διασωλήνωση
+        if(strcmp(args[0],"cd") == 0) { // Αλλαγή directory
+            if(args[1] == NULL) { // Δεν υπάρχει path για την αλλαγή του directory
+            //Επιστροφή στο Home Directory του χρήστη
+                char* homeDir = getHomeDir();
+                if(changeDir(homeDir) == EXIT_FAILURE) {
+                    return EXIT_FAILURE;
+                }
+            } else {
+                changeDir(args[1]);
+            }
+        } else if(strcmp(args[0],"exit") == 0) {
+            exit(EXIT_SUCCESS);
+        } else {
+            return Launch(args);
+        }
+    }
+
     return 0;
 }
 
@@ -94,7 +164,7 @@ int ExecuteInput(char** args) {
 char* ReadInput() {
     char* input;
     errno = 0;
-    input = malloc(g_commandMax*sizeof(char));
+    input = (char*)malloc(g_commandMax*sizeof(char));
 
     if(errno) {
         perror("An error occured");
@@ -117,7 +187,7 @@ char** TokenizeInput(char* input,int* length) {
     char *token;
     char **tokens;
     errno = 0;
-    tokens = malloc(g_commandMaxWords*sizeof(char*));
+    tokens = (char**)malloc(g_commandMaxWords*sizeof(char*));
     int i = 0;
 
     if(errno) {
@@ -143,6 +213,14 @@ int Redirect(char* redirectSymbol,char* filename) {
     int out,in;
     g_out = dup(1);
     g_in = dup(0);
+    /*
+    // Όλα τα αρχεία αποθηκεύονται στο directory του shell, όχι στο current directory
+    char path[150];
+    strcpy(path,getHomeDir());
+    strcat(path,"/");
+    strcat(path,filename);
+    */
+
     if(strcmp(redirectSymbol,">") == 0) {
         errno = 0;
         out = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
@@ -182,7 +260,7 @@ void directBack() {
     g_redirect = 0;
 }
 
-char** ParseInput(char* input) {
+char** ParseInput(char* input, int* length) {
     int numOfTokens;
     int numOfArgs = 0;
     char** args;
@@ -193,7 +271,6 @@ char** ParseInput(char* input) {
     int i;
     for(i=0; i<numOfTokens; i++) {
         if(strcmp(tokens[i],">") == 0 || strcmp(tokens[i],">>") == 0 || strcmp(tokens[i],"<") == 0) {
-            printf("Here 0");
             Redirect(tokens[i],tokens[i+1]); // To tokekens[i+1] περιέχει το αρχείο που χρησιμοποιείται στο redirection
             i++; // Το όνομα του αρχείου που θα γίνει το redirection δεν πρέπει να περιλαμβάνεται στα args
         } else if(!(i == numOfTokens-1 && strcmp(tokens[i],"&") == 0)) { // Το & δεν πρέπει να συμπεριληφθεί στα args, άρα ούτε και να καταμετρηθεί
@@ -203,7 +280,7 @@ char** ParseInput(char* input) {
     if(numOfArgs == 0) { // Για εντολή της μορφής "> file.txt"
         return NULL;
     }
-    args = malloc((numOfArgs+1)*sizeof(char*));
+    args = (char**)malloc((numOfArgs+1)*sizeof(char*));
     int j = 0;
     for(i=0; i<numOfTokens; i++) {
         if(strcmp(tokens[i],">") == 0 || strcmp(tokens[i],">>") == 0 || strcmp(tokens[i],"<") == 0) {
@@ -215,6 +292,7 @@ char** ParseInput(char* input) {
             j++;
         }
     }
+    *length = j;
     args[j] = NULL;
     return args;
 }
@@ -223,7 +301,7 @@ int main()
 {
     char* input;
     char** args;
-    //int length; //TRIAL
+    int length;
 
     // Αλλαγή του current directory στο home του user
     char* homeDir = getHomeDir();
@@ -242,11 +320,16 @@ int main()
         printf("SquaredShell:%s:$ ", cwd);
         input = ReadInput(); // Ανάγνωση εντολής χρήστη
         //args = TokenizeInput(input,&length); //TRIAL
-        args = ParseInput(input);
-        if(ExecuteInput(args) == EXIT_FAILURE) {
+        args = ParseInput(input, &length);
+        /*int i=0;
+        while(args[i] != NULL) {
+            printf("%s\n",args[i]);
+            i++;
+        }*/
+        if(ExecuteInput(args,length) == EXIT_FAILURE) {
                 return EXIT_FAILURE;
         }
-        if(g_redirect) {
+        if(g_redirect) { // Αν έχει γίνει ανακατεύθυνση σε αρχείο πρέπει να γίνει πάλι ανακατεύθυνση του output στην κονσόλα
             directBack();
         }
     }
