@@ -116,7 +116,6 @@ int ExecuteInput(char** args, int length) {
         // Το παιδί εκτελεί το αριστερό μέρος της διασωλήνωσης
         if(fork() == 0) {
             dup2(pipefd[0],0); // Ανάγνωση από είσοδο pipe όχι από stdin
-            //g_redirect = 1;
             close(pipefd[1]);
             errno =0;
             execvp(rightArgs[0],rightArgs);
@@ -127,7 +126,6 @@ int ExecuteInput(char** args, int length) {
             waitpid(pid,NULL,0);
         } else if((pid=fork()) == 0) { // Διεργασία γονέας
             dup2(pipefd[1],1); // Εγγραφή στην έξοδο του pipe όχι στο stdout
-            //g_redirect = 1;
             close(pipefd[0]);
             errno =0;
             execvp(leftArgs[0],leftArgs);
@@ -156,7 +154,8 @@ int ExecuteInput(char** args, int length) {
             return Launch(args);
         }
     }
-
+    Deallocate(leftArgs,left_i);
+    Deallocate(rightArgs,right_i);
     return 0;
 }
 
