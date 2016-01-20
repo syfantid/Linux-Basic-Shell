@@ -8,6 +8,7 @@
 #include <pwd.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
 int g_commandMax = 1024; // Παραδοχή: Ένα command του shell δεν ξεπερνά τους 1024 χαρακτήρες
 int g_commandMaxWords = 128;
@@ -15,6 +16,59 @@ int g_currentDirectoryMax = 1024; // Παραδοχή: Ένα current directory 
 bool g_redirect = 0;
 int g_out;
 int g_in;
+
+int running_pid; //i diergasia pou trexei sto ipovathro.
+//Arxika arxikopoieitai sto miden, deixnontas oti den iparxei deirgasia sto upovathro
+
+struct process{  //o komvos tis listas
+    int id;
+    struct process *next
+}*head=NULL;
+
+/* prosthetei tin diergasia sto telos tis listas */
+struct process* addProcessInList(int process_id, struct process *head){
+
+
+    //create new node
+    struct process *newNode = (struct process*)malloc(sizeof(struct process));
+
+    if(newNode == NULL){
+        fprintf(stderr, "Unable to allocate memory for new node\n");
+        exit(-1);
+    }
+
+    newNode->id = process_id;
+    newNode->next = NULL;
+
+    if(head == NULL){ //an i lista einai adeia
+        head = newNode;
+        return head;
+    }
+
+    else //prosthese tin diergasia sto telos tis listas
+    {
+        struct process *current = head;
+        while (current->next!=NULL) {
+                current=current->next;
+
+        };
+        current->next=newNode;
+        return head;
+    }
+
+}
+
+
+/*diagrafei tin prwti diergasia tis listas*/
+struct process* deleteFirstProcess(struct process *head){
+
+    struct process *temp;
+    temp=head->next;
+    free(head);
+    return temp;
+
+}
+
 
 /* Επιστρέφει το Home directory του χρήστη */
 char* getHomeDir() {
@@ -48,17 +102,25 @@ void Deallocate(char **array,int length)
     free(array);
 }
 
-/* Εκτέλεση εξωτερικού προγράμματος */
-int Launch(char** args) {
+int Launch(char** args,int background) {  //dexetai ta orismata kai mia metabliti pou deixnei an i diergasia prepei na ekteleste sto upovathro
     pid_t pid = fork();
 
     if(pid == 0) { // Διεργασία παιδί - Εκτελεί το εξωτερικό πρόγραμμα
         execvp(args[0],args);
+
     } else if(pid > 0) { // Διεργασία γονέας
-        int status;
-        do {
-            waitpid(pid, &status, WUNTRACED); // Περίμενε τη διεργασία παιδί, για να μη μένουν zombies διεργασίες
-        } while (!WIFEXITED(status) && !WIFSIGNALED(status)); // Η διεργασία παιδί είτε τερματίστηκε (κανονικά ή με error) είτε "σκοτώθηκε" από signal
+          if(background == 0){ //an den einai sto background
+                int status;
+                do {
+                waitpid(pid, &status, WUNTRACED); // Περίμενε τη διεργασία παιδί, για να μη μένουν zombies διεργασίες
+                } while (!WIFEXITED(status) && !WIFSIGNALED(status)); // Η διεργασία παιδί είτε τερματίστηκε (κανονικά ή με error) είτε "σκοτώθηκε" από signal
+           }
+           else{ //an ekteleitai sto background
+                kill(pid,SIGSTOP);
+                head = addProcessInList(pid,head); //h diergasia mpainei stin lista
+
+           }
+
     } else { // pid < 0 -> Error
         fprintf(stderr,"Fork() Error");
         return EXIT_FAILURE;
@@ -66,8 +128,10 @@ int Launch(char** args) {
     return 0;
 }
 
+
+
 /* Εκτέλεση Εντολής */
-int ExecuteInput(char** args, int length) {
+int ExecuteInput(char** args, int length,int background) {
     if(args == NULL) {
         return EXIT_FAILURE; // Δόθηκε κενή εντολή
     }
@@ -150,7 +214,8 @@ int ExecuteInput(char** args, int length) {
         } else if(strcmp(args[0],"exit") == 0) {
             exit(EXIT_SUCCESS);
         } else {
-            return Launch(args);
+
+             return Launch(args,background);
         }
     }
     Deallocate(leftArgs,left_i);
@@ -259,7 +324,7 @@ void directBack() {
 }
 
 /* Με δεδομένη μία λιστα από tokens επιλέγει τα arguments για την κλήση των εσωτερικών/εξωτερικών προγραμμάτων */
-char** ParseInput(char* input, int* length) {
+char** ParseInput(char* input, int* length,int* background) {
     int numOfTokens;
     int numOfArgs = 0;
     char** args;
@@ -272,13 +337,20 @@ char** ParseInput(char* input, int* length) {
         if(strcmp(tokens[i],">") == 0 || strcmp(tokens[i],">>") == 0 || strcmp(tokens[i],"<") == 0) {
             Redirect(tokens[i],tokens[i+1]); // To tokekens[i+1] περιέχει το αρχείο που χρησιμοποιείται στο redirection
             i++; // Το όνομα του αρχείου που θα γίνει το redirection δεν πρέπει να περιλαμβάνεται στα args
-        } else if(!(i == numOfTokens-1 && strcmp(tokens[i],"&") == 0)) { // Το & δεν πρέπει να συμπεριληφθεί στα args, άρα ούτε και να καταμετρηθεί
+        }
+        else if(strcmp(tokens[i],"&") == 0){ //an i diergasia prepei na ektelestei sto ipovathro, allazei i timi tis background
+                *background = 1;
+        }
+        else if(!(i == numOfTokens-1 && strcmp(tokens[i],"&") == 0)) { // Το & δεν πρέπει να συμπεριληφθεί στα args, άρα ούτε και να καταμετρηθεί
+
             numOfArgs++;
         }
     }
+
     if(numOfArgs == 0) { // Για εντολή της μορφής "> file.txt"
         return NULL;
     }
+
     args = (char**)malloc((numOfArgs+1)*sizeof(char*));
     int j = 0;
     for(i=0; i<numOfTokens; i++) {
@@ -288,13 +360,59 @@ char** ParseInput(char* input, int* length) {
             args[j] = (char*)malloc(sizeof(char) * (strlen(tokens[i]) + 1));
             strcpy(args[j],tokens[i]);
             //args[j] = tokens[i];
+
             j++;
         }
     }
     *length = j;
     args[j] = NULL;
+
+
     return args;
 }
+
+ void Round_Robbin(int signal){
+
+    int status;
+    if(head == NULL){
+        //printf("den uparxei deirgasia sto ipovathro\n");
+    }
+    else{       // an iparxei estw kai mia dieradia sti lista
+        if(running_pid == 0){     //an den ekteleitai kaimia diergasia sto ipovathro
+            running_pid=head->id;   //i deiergasia poy tha eketelestei einai i prwti tis listas
+            kill(running_pid,SIGCONT);
+        }
+        else{   //an iparxei idi diergasia apo ti lista i opoia ekteleitai
+            pid_t check = waitpid(running_pid,&status,WNOHANG); //elegxoume tin katastasi tis ekteloumenhs diergasias
+            if(check == 0){     //an i diergasia den exei termatisei, alla exei teleiwsei o xronos poy tis dinei o RR
+                kill(running_pid,SIGSTOP);     //tin stamatame
+                head = addProcessInList(running_pid,head);     //mapinei sto telos tis listas
+                head = deleteFirstProcess(head);    //diagrafetai apo tin arxi tis lsitas (afou exei metaferthei sto telos)
+                running_pid = head->id; //dialegoume tin epomenh gia na sunexisei tin ektelesi tis
+                kill(running_pid,SIGCONT);
+            }
+            else if(check == -1){
+                printf("Egine lathos sthn ektelesi tis diergasias");
+            }
+            else{
+                printf("i diergasia me pid: %d teleiwse",running_pid);
+                head = deleteFirstProcess(head); //otan teleiwsei, diafrafetai apo tin lista
+                running_pid = 0; //kai h diergasia poy ekteleitai arxikopoieitai sto miden gia na ksekinisie na ekteleitai i epomeni diergasia
+            }
+
+
+        }
+    }
+
+
+
+}
+
+
+
+
+
+
 
 int main()
 {
@@ -305,6 +423,15 @@ int main()
     // Αλλαγή του current directory στο home του user
     char* homeDir = getHomeDir();
     changeDir(homeDir);
+
+    int background = 0; //flag metavliti poy deixnei an i entoli prepei an ektelestei sto uipovathro
+
+    struct timeval value={1,0};
+	struct timeval interval={1,0};
+	struct itimerval timer={interval,value};
+	setitimer(ITIMER_REAL, &timer, 0);
+
+	signal(SIGALRM,&Round_Robbin); //kalei tin sunartisis Round_Robbin kathe 1 sec
 
     while (1) {
         // Εκτύπωση προτροπής στην κονσόλα του shell
@@ -317,14 +444,27 @@ int main()
         }
         printf("SquaredShell:%s:$ ", cwd);
 
+
         // Κύριο πρόγραμμα
         input = ReadInput(); // 1. Ανάγνωση εντολής χρήστη
-        args = ParseInput(input, &length); // 2. Επεξεργασία εντολής χρήστη
-        if(ExecuteInput(args,length) == EXIT_FAILURE) { // 3. Εκτέλεση εντολής χρήστη
+
+                args = ParseInput(input,&length,&background);
+            //    printf(" to background einai: %d",background);
+             //   if(background==1)
+            //        printf(" stin main einai backgrond \n");
+            //    else
+             //       printf("stin main den einai backgrond \n");
+                    //prosoxi allagi kai stin executeInput(allagi sto orisma to background)
+
+
+
+        //args = ParseInput(input, &length); // 2. Επεξεργασία εντολής χρήστη
+        if(ExecuteInput(args,length,background) == EXIT_FAILURE) { // 3. Εκτέλεση εντολής χρήστη
                 return EXIT_FAILURE;
         }
         // Αν έχει γίνει ανακατεύθυνση σε αρχείο πρέπει να γίνει πάλι ανακατεύθυνση του output στην κονσόλα
         if(g_redirect) {
+
             directBack();
         }
     }
