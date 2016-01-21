@@ -17,7 +17,7 @@ bool g_redirect = 0;
 int g_out;
 int g_in;
 
-int running_pid; //i diergasia pou trexei sto ipovathro.
+int running_pid=0; //i diergasia pou trexei sto ipovathro.
 //Arxika arxikopoieitai sto miden, deixnontas oti den iparxei deirgasia sto upovathro
 
 struct process{  //o komvos tis listas
@@ -28,8 +28,6 @@ struct process{  //o komvos tis listas
 /* prosthetei tin diergasia sto telos tis listas */
 struct process* addProcessInList(int process_id, struct process *head){
 
-
-    //create new node
     struct process *newNode = (struct process*)malloc(sizeof(struct process));
 
     if(newNode == NULL){
@@ -410,10 +408,6 @@ char** ParseInput(char* input, int* length,int* background) {
 
 
 
-
-
-
-
 int main()
 {
     char* input;
@@ -447,18 +441,7 @@ int main()
 
         // Κύριο πρόγραμμα
         input = ReadInput(); // 1. Ανάγνωση εντολής χρήστη
-
-                args = ParseInput(input,&length,&background);
-            //    printf(" to background einai: %d",background);
-             //   if(background==1)
-            //        printf(" stin main einai backgrond \n");
-            //    else
-             //       printf("stin main den einai backgrond \n");
-                    //prosoxi allagi kai stin executeInput(allagi sto orisma to background)
-
-
-
-        //args = ParseInput(input, &length); // 2. Επεξεργασία εντολής χρήστη
+        args = ParseInput(input, &length,&background); // 2. Επεξεργασία εντολής χρήστη
         if(ExecuteInput(args,length,background) == EXIT_FAILURE) { // 3. Εκτέλεση εντολής χρήστη
                 return EXIT_FAILURE;
         }
