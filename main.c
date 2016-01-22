@@ -17,20 +17,20 @@ bool g_redirect = 0;
 int g_out;
 int g_in;
 
-int running_pid=0; //i diergasia pou trexei sto ipovathro.
-//Arxika arxikopoieitai sto miden, deixnontas oti den iparxei deirgasia sto upovathro
+int running_pid=0; // Η διεργασία που τρέχει στο υπόβαθρο
+// Αρχικά, αρχικοποιείται στο 0, γιατί δεν υπάρχει διεργασία στο υπόβαθρο
 
-struct process{  //o komvos tis listas
+struct process{  // Ο κόμβος της λίστας
     int id;
     struct process *next
 }*head=NULL;
 
-/* prosthetei tin diergasia sto telos tis listas */
+/* Προσθέτει μία διεργασία στο τέλος της λίστας */
 struct process* addProcessInList(int process_id, struct process *head){
 
     struct process *newNode = (struct process*)malloc(sizeof(struct process));
 
-    if(newNode == NULL){
+    if(newNode == NULL) {
         fprintf(stderr, "Unable to allocate memory for new node\n");
         exit(-1);
     }
@@ -38,17 +38,13 @@ struct process* addProcessInList(int process_id, struct process *head){
     newNode->id = process_id;
     newNode->next = NULL;
 
-    if(head == NULL){ //an i lista einai adeia
+    if(head == NULL){ // Αν η λίστα είναι άδεια
         head = newNode;
         return head;
-    }
-
-    else //prosthese tin diergasia sto telos tis listas
-    {
+    } else { // Πρόσθεσε τη διεργασία στο τέλος της λίστας
         struct process *current = head;
         while (current->next!=NULL) {
-                current=current->next;
-
+            current=current->next;
         };
         current->next=newNode;
         return head;
@@ -57,7 +53,7 @@ struct process* addProcessInList(int process_id, struct process *head){
 }
 
 
-/*diagrafei tin prwti diergasia tis listas*/
+/* Διαγράφει την πρώτη διεργασία της λίστας */
 struct process* deleteFirstProcess(struct process *head){
 
     struct process *temp;
@@ -107,16 +103,14 @@ int Launch(char** args,int background) {  //dexetai ta orismata kai mia metablit
         execvp(args[0],args);
 
     } else if(pid > 0) { // Διεργασία γονέας
-          if(background == 0){ //an den einai sto background
+          if(background == 0){ // Αν δεν πρέπει να εκτελεστεί στο background
                 int status;
                 do {
-                waitpid(pid, &status, WUNTRACED); // Περίμενε τη διεργασία παιδί, για να μη μένουν zombies διεργασίες
+                    waitpid(pid, &status, WUNTRACED); // Περίμενε τη διεργασία παιδί, για να μη μένουν zombies διεργασίες
                 } while (!WIFEXITED(status) && !WIFSIGNALED(status)); // Η διεργασία παιδί είτε τερματίστηκε (κανονικά ή με error) είτε "σκοτώθηκε" από signal
-           }
-           else{ //an ekteleitai sto background
+           } else{ // Αν εκτελείται στο background η διεργασία γονέας δεν πρέπει να κάνει wait
                 kill(pid,SIGSTOP);
-                head = addProcessInList(pid,head); //h diergasia mpainei stin lista
-
+                head = addProcessInList(pid,head); // Η διεργασία μπαίνει στη λίστα
            }
 
     } else { // pid < 0 -> Error
@@ -335,12 +329,13 @@ char** ParseInput(char* input, int* length,int* background) {
         if(strcmp(tokens[i],">") == 0 || strcmp(tokens[i],">>") == 0 || strcmp(tokens[i],"<") == 0) {
             Redirect(tokens[i],tokens[i+1]); // To tokekens[i+1] περιέχει το αρχείο που χρησιμοποιείται στο redirection
             i++; // Το όνομα του αρχείου που θα γίνει το redirection δεν πρέπει να περιλαμβάνεται στα args
-        }
-        else if(strcmp(tokens[i],"&") == 0){ //an i diergasia prepei na ektelestei sto ipovathro, allazei i timi tis background
-                *background = 1;
-        }
-        else if(!(i == numOfTokens-1 && strcmp(tokens[i],"&") == 0)) { // Το & δεν πρέπει να συμπεριληφθεί στα args, άρα ούτε και να καταμετρηθεί
-
+        } else if(i == numOfTokens-1 && strcmp(tokens[i],"&") == 0){ // Σε περίπτωση που υπάρχει κενό ανάμεσα στο τελευταίο token και το &
+            *background = 1; //Αν η διεργασία πρέπει να εκτελεστεί στο υπόβαθρο αλλάζει η τιμή της background
+        } else if (i == numOfTokens-1 && tokens[i][strlen(tokens[i])-1] == '&') { // Σε περίπτωση που δεν υπάρχει κενό ανάμεσα στο τελευταίο token και το &
+            tokens[i][strlen(tokens[i])-1] = '\0'; // Αφαιρώ το & από τα args
+            numOfArgs++;
+            *background = 1;
+        } else { // Το & οι χαρακτήρες ανακατεύθυνσης δεν πρέπει να συμπεριληφθούν στα args, άρα ούτε και να καταμετρηθούν
             numOfArgs++;
         }
     }
@@ -369,41 +364,32 @@ char** ParseInput(char* input, int* length,int* background) {
     return args;
 }
 
- void Round_Robbin(int signal){
-
+/* Συνάρτηση που υλοποιεί τον αλγόριθμο δρομολόγησης μνήμης RR */
+void Round_Robbin(int signal){
     int status;
-    if(head == NULL){
-        //printf("den uparxei deirgasia sto ipovathro\n");
-    }
-    else{       // an iparxei estw kai mia dieradia sti lista
-        if(running_pid == 0){     //an den ekteleitai kaimia diergasia sto ipovathro
-            running_pid=head->id;   //i deiergasia poy tha eketelestei einai i prwti tis listas
+    if(head == NULL) {
+        //printf("No process in the background!\n");
+    } else {       // Αν υπάρχει έστω και μια διεργασία στη λίστα
+        if(running_pid == 0) {     // Αν δεν εκτελείται καμία διεργασία στο υπόβαθρο
+            running_pid=head->id;   // Η διεργασία που θα εκτελεστεί είναι η πρώτη της λίστας
             kill(running_pid,SIGCONT);
-        }
-        else{   //an iparxei idi diergasia apo ti lista i opoia ekteleitai
-            pid_t check = waitpid(running_pid,&status,WNOHANG); //elegxoume tin katastasi tis ekteloumenhs diergasias
-            if(check == 0){     //an i diergasia den exei termatisei, alla exei teleiwsei o xronos poy tis dinei o RR
-                kill(running_pid,SIGSTOP);     //tin stamatame
-                head = addProcessInList(running_pid,head);     //mapinei sto telos tis listas
-                head = deleteFirstProcess(head);    //diagrafetai apo tin arxi tis lsitas (afou exei metaferthei sto telos)
-                running_pid = head->id; //dialegoume tin epomenh gia na sunexisei tin ektelesi tis
+        } else {   // Αν υπάρχει ήδη διεργασία από τη λίστα που εκτελείται
+            pid_t check = waitpid(running_pid,&status,WNOHANG); // Ελέγχουμε την κατάσταση της εκτελούμενης διεργασίας
+            if(check == 0) { // Αν η διεργασία δεν έχει τερματίσει, αλλά έχει τελειώσει ο χρόνος που της δίνει ο RR
+                kill(running_pid,SIGSTOP); // Τη σταματάμε
+                head = addProcessInList(running_pid,head); // Την προσθέτουμε στο τέλος της λίστας
+                head = deleteFirstProcess(head);    // Τη διαγράφουμε από την αρχή της λίστας
+                running_pid = head->id; // Διαλέγουμε την επόμενη διεργασία για να συνεχίσει την εκτέλεσή της
                 kill(running_pid,SIGCONT);
+            } else if(check == -1) {
+                printf("\nProblem with executing the process!\n");
+            } else {
+                printf("\nProcess with pid: %d has ended!\n",running_pid);
+                head = deleteFirstProcess(head); // Όταν τελειώνει διαγράφεται από τη λίστα
+                running_pid = 0; // Και η διεργασία που εκτελείται αρχικοποιείται στο 0 έτσι ώστε να αρχίσει να εκτελείται η επόμενη διεργασία
             }
-            else if(check == -1){
-                printf("Egine lathos sthn ektelesi tis diergasias");
-            }
-            else{
-                printf("i diergasia me pid: %d teleiwse",running_pid);
-                head = deleteFirstProcess(head); //otan teleiwsei, diafrafetai apo tin lista
-                running_pid = 0; //kai h diergasia poy ekteleitai arxikopoieitai sto miden gia na ksekinisie na ekteleitai i epomeni diergasia
-            }
-
-
         }
     }
-
-
-
 }
 
 
@@ -418,14 +404,14 @@ int main()
     char* homeDir = getHomeDir();
     changeDir(homeDir);
 
-    int background = 0; //flag metavliti poy deixnei an i entoli prepei an ektelestei sto uipovathro
+    int background = 0; // Δείχνει αν η εντολή πρέπει να εκτελεστεί στο υπόβαθρο
 
     struct timeval value={1,0};
 	struct timeval interval={1,0};
 	struct itimerval timer={interval,value};
 	setitimer(ITIMER_REAL, &timer, 0);
 
-	signal(SIGALRM,&Round_Robbin); //kalei tin sunartisis Round_Robbin kathe 1 sec
+	signal(SIGALRM,&Round_Robbin); // Καλεί τη συνάρτηση Round-Robin κάθε 1 sec
 
     while (1) {
         // Εκτύπωση προτροπής στην κονσόλα του shell
@@ -437,11 +423,11 @@ int main()
             exit(EXIT_FAILURE);
         }
         printf("SquaredShell:%s:$ ", cwd);
-
-
+        // Watning για scroll window (αποτρέπει τη σωστή εμφάνιση της προτροπής):
+        // http://askubuntu.com/questions/435528/gedit-warning-gtkscrolledwindow-is-mapped-but-visible-child-gtkscrollbar-is-not
         // Κύριο πρόγραμμα
         input = ReadInput(); // 1. Ανάγνωση εντολής χρήστη
-        args = ParseInput(input, &length,&background); // 2. Επεξεργασία εντολής χρήστη
+        args = ParseInput(input, &length, &background); // 2. Επεξεργασία εντολής χρήστη
         if(ExecuteInput(args,length,background) == EXIT_FAILURE) { // 3. Εκτέλεση εντολής χρήστη
                 return EXIT_FAILURE;
         }
