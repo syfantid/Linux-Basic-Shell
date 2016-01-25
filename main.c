@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <stdbool.h>
 #include <sys/time.h>
+#include <dirent.h>
 
 int g_commandMax = 1024; // Παραδοχή: Ένα command του shell δεν ξεπερνά τους 1024 χαρακτήρες
 int g_commandMaxWords = 128;
@@ -63,6 +64,21 @@ struct process* deleteFirstProcess(struct process *head){
 
 }
 
+/* Ελέγχει αν η συβολοσειρά s τελειώνει με τη συμβολοσειρά end */
+int endsWith(char *s,char *end)
+{
+    if(strlen(s) >= strlen(end)) { // Πρέπει η s να είναι μεγαλύτερη ή ίση της end για να έχει νόημα η σύγκριση
+        int position = strlen(s) - strlen(end); // Από πού θα ξεκινήσω να συγκρίνω
+        int i;
+        for(i = position; i < strlen(s) ; i++) {
+            if(s[i] != end[i - position]) { // Διαφέρει έστω και σε έναν χαρακτήρα
+                return 0;
+            }
+        }
+        return 1; // Είναι ίδιες, δε διαφέρουν σε κανέναν χαρακτήρα
+    }
+    return 0;
+}
 
 /* Επιστρέφει το Home directory του χρήστη */
 char* getHomeDir() {
@@ -96,7 +112,8 @@ void Deallocate(char **array,int length)
     free(array);
 }
 
-int Launch(char** args,int background) {  //dexetai ta orismata kai mia metabliti pou deixnei an i diergasia prepei na ekteleste sto upovathro
+/* Δέχεται ως ορίσματα τα arguments του εκτελέσιμου καθώς και μια μεταβλητή που ορίζει αν η εκτέλεση γίνεται στο υπόβαθρο */
+int Launch(char** args,int background) {
     pid_t pid = fork();
 
     if(pid == 0) { // Διεργασία παιδί - Εκτελεί το εξωτερικό πρόγραμμα
@@ -119,8 +136,6 @@ int Launch(char** args,int background) {  //dexetai ta orismata kai mia metablit
     }
     return 0;
 }
-
-
 
 /* Εκτέλεση Εντολής */
 int ExecuteInput(char** args, int length,int background) {
@@ -254,11 +269,34 @@ char** TokenizeInput(char* input,int* length) {
 
     while( token != NULL ) // Όσο υπάρχουν και άλλα tokens
     {
-        tokens[i] = token;
-        i+=1;
+        if(token[0] == '*') { // Συναντώ wildcard άρα πρέπει να γίνει expand
+            memmove(token, token+1, strlen(token)); // Αφαιρεί το wildcard
+            char directory[256];
+            getcwd(directory,sizeof(directory)); // Βρίκει το current directory
+            // Χρησιμοποιούνται για να προσπελάσουμε το φάκελο
+            DIR *dir;
+            struct dirent *afile;
+            errno = 0;
+            dir = opendir(directory);
+            if(errno) {
+                perror("An error occured");
+                exit(EXIT_FAILURE);
+            }
+
+            while( (afile=readdir(dir)) != NULL ) { // Όσο υπάρχουν ακόμη αρχεία
+                if( endsWith(afile->d_name,token) == 1) // Αν το όνομα του αρχείου τελειώνει όπως και το wildcard
+                {
+                    tokens[i] = afile->d_name; // Πρόσθεσε το αρχείο στα tokens
+                    i+=1;
+                }
+            }
+        } else { // Αν δεν υπάρχει wildcard
+            tokens[i] = token;
+            i+=1;
+        }
         token = strtok(NULL, delimiters);
     }
-    tokens[i] = NULL; //TRIAL
+    tokens[i] = NULL;
     *length = i;
     return tokens;
 }
@@ -391,8 +429,6 @@ void Round_Robbin(int signal){
         }
     }
 }
-
-
 
 int main()
 {
